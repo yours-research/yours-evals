@@ -1,0 +1,55 @@
+{
+  "name": "@yours/evals",
+  "version": "0.1.0",
+  "description": "End-to-end local browser assistant benchmark, regression suite, and scorecard generator for the Yours Research ecosystem.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "yours-evals": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "ARCHITECTURE.md",
+    "CONTRIBUTING.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "eval": "node ./dist/cli.js --suite all"
+  },
+  "keywords": [
+    "yours-research",
+    "evals",
+    "benchmark",
+    "local-ai",
+    "browser-agent",
+    "webgpu",
+    "prompt-injection",
+    "rag"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yours-research/yours-evals.git"
+  },
+  "homepage": "https://yours.sh",
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.4"
+  }
+}

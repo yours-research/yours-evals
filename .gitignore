@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+scorecard.json
+scorecard.md
+.DS_Store
