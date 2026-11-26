@@ -70,6 +70,34 @@ describe('baseline comparison gate and scorecard reporters', () => {
     expect(diff.regressions[0]?.threshold).toBe(50);
   });
 
+  it('uses relative regression tolerance for throughput/FPS and pct tolerance for jankPct while still catching real drops', async () => {
+    const baseline = await runSuite('voice');
+    const current = cloneScorecard(baseline);
+    baseline.summary.suiteMetrics['meanDecodeTokPerSec'] = 72;
+    baseline.summary.suiteMetrics['avgFps'] = 144;
+    baseline.summary.suiteMetrics['jankPct'] = 0;
+
+    // Normal GPU run variance (< 12% throughput/FPS, < 2.0% jankPct) passes
+    current.summary.suiteMetrics['meanDecodeTokPerSec'] = 70.5;
+    current.summary.suiteMetrics['avgFps'] = 134;
+    current.summary.suiteMetrics['jankPct'] = 0.85;
+    const withinNoise = compareScorecards(baseline, current, 0.02);
+    expect(withinNoise.passed).toBe(true);
+    expect(withinNoise.regressions).toHaveLength(0);
+
+    // Real throughput/FPS collapse or sustained jank fails cleanly
+    current.summary.suiteMetrics['meanDecodeTokPerSec'] = 55;
+    current.summary.suiteMetrics['avgFps'] = 105;
+    current.summary.suiteMetrics['jankPct'] = 4.2;
+    const realDrop = compareScorecards(baseline, current, 0.02);
+    expect(realDrop.passed).toBe(false);
+    expect(realDrop.regressions.map((r) => r.metric).sort()).toEqual([
+      'avgFps',
+      'jankPct',
+      'meanDecodeTokPerSec',
+    ]);
+  });
+
   it('formats valid JSON and GitHub-compatible Markdown scorecards', async () => {
     const baseline = await runSuite('guard');
     const current = cloneScorecard(baseline);
