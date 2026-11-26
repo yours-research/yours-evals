@@ -43,7 +43,11 @@ function inferDirection(
     ? metricName.slice(metricName.lastIndexOf('.') + 1)
     : metricName;
   const override = overrides?.[metricName] ?? overrides?.[shortName];
-  const isLatency = shortName.endsWith('LatencyMs') || shortName.endsWith('TeardownMs');
+  const isLatency =
+    shortName.endsWith('LatencyMs') ||
+    shortName.endsWith('TeardownMs') ||
+    shortName.endsWith('TtftMs') ||
+    shortName.endsWith('WaitMs');
   if (override) {
     return { direction: override, isLatency };
   }
