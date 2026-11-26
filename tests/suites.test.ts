@@ -205,4 +205,46 @@ describe('ecosystem evaluation suites', () => {
     expect(scorecard.summary.suiteMetrics['vadOnsetClippingRate']).toBe(1);
     expect(scorecard.summary.suiteMetrics['bargeInSlaPassRate']).toBe(0);
   });
+
+  it('invokes provider.setClock during memory corpus seeding so cloned-storage providers backdate records accurately', async () => {
+    const base = createBaselineMemoryProvider();
+    let activeClock = 0;
+    const seenClocks: number[] = [];
+    const clonedProvider: MemoryProvider & { setClock: (ts: number) => void } = {
+      setClock(ts: number) {
+        activeClock = ts;
+        seenClocks.push(ts);
+      },
+      async remember(input: MemoryRecordInput): Promise<MemoryRecord> {
+        const saved = await base.remember(input);
+        saved.createdAt = activeClock;
+        saved.updatedAt = activeClock;
+        saved.lastAccessedAt = activeClock;
+        return { ...saved }; // return detached clone like InMemoryStorageBackend
+      },
+      recall: (q) => base.recall(q),
+      consolidate: (tid, msgs) => base.consolidate(tid, msgs),
+      inspect: (f) => base.inspect(f),
+      forget: (id) => base.forget(id),
+      exportEncrypted: (p) => base.exportEncrypted(p),
+      importEncrypted: (b, p) => base.importEncrypted(b, p),
+      wipeAll: () => base.wipeAll(),
+    };
+
+    const scorecard = await runSuite('memory', {
+      targets: {
+        memory: () => createBaselineMemoryProvider(),
+      },
+    });
+    expect(scorecard.summary.suiteMetrics['temporalDecayAccuracy']).toBe(1);
+
+    const clonedScorecard = await runSuite('memory', {
+      targets: {
+        memory: () => clonedProvider,
+      },
+    });
+    expect(clonedScorecard.summary.failed).toBe(0);
+    expect(clonedScorecard.summary.suiteMetrics['temporalDecayAccuracy']).toBe(1);
+    expect(seenClocks.length).toBeGreaterThan(2);
+  });
 });
