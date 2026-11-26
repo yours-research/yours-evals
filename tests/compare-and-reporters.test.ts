@@ -56,6 +56,20 @@ describe('baseline comparison gate and scorecard reporters', () => {
     expect(regressedMetrics).toContain('chunkBoundaryAccuracy');
   });
 
+  it('treats *TtftMs and *WaitMs metrics as lower-is-better latencies governed by maxLatencyRegressionMs', async () => {
+    const baseline = await runSuite('voice');
+    const current = cloneScorecard(baseline);
+    baseline.summary.suiteMetrics['meanTtftMs'] = 250;
+    baseline.summary.suiteMetrics['meanInterTurnWaitMs'] = 40;
+    current.summary.suiteMetrics['meanTtftMs'] = 280; // +30ms (within 50ms threshold, above 0.02 ratio)
+    current.summary.suiteMetrics['meanInterTurnWaitMs'] = 110; // +70ms (exceeds 50ms threshold)
+
+    const diff = compareScorecards(baseline, current, 0.02, { maxLatencyRegressionMs: 50 });
+    expect(diff.passed).toBe(false);
+    expect(diff.regressions.map((r) => r.metric)).toEqual(['meanInterTurnWaitMs']);
+    expect(diff.regressions[0]?.threshold).toBe(50);
+  });
+
   it('formats valid JSON and GitHub-compatible Markdown scorecards', async () => {
     const baseline = await runSuite('guard');
     const current = cloneScorecard(baseline);
