@@ -5,6 +5,10 @@ export type MetricDirection = 'higher' | 'lower';
 
 export interface CompareOptions {
   maxLatencyRegressionMs?: number;
+  /** Relative regression tolerance [0..1] for non-unit scale throughput metrics (default: 0.12 = 12%). */
+  maxRelativeRegression?: number;
+  /** Absolute percentage-point tolerance for jitter/jank *Pct metrics on a 0..100 scale (default: 2.0). */
+  maxJankRegressionPct?: number;
   metricDirections?: Record<string, MetricDirection>;
 }
 
@@ -33,12 +37,19 @@ const LOWER_IS_BETTER_SUFFIXES = [
   'falsePositiveRate',
   'sensitiveDomainLeakRate',
   'vadOnsetClippingRate',
+  'jankPct',
+  'freezePct',
+  'errorCount',
+  'popupWindowCount',
+  'leakRate',
 ];
 
-function inferDirection(
+type MetricScaleKind = 'latency' | 'percentage' | 'throughput' | 'unit';
+
+function inferMetricMeta(
   metricName: string,
   overrides?: Record<string, MetricDirection>,
-): { direction: MetricDirection; isLatency: boolean } {
+): { direction: MetricDirection; isLatency: boolean; scale: MetricScaleKind } {
   const shortName = metricName.includes('.')
     ? metricName.slice(metricName.lastIndexOf('.') + 1)
     : metricName;
@@ -48,13 +59,27 @@ function inferDirection(
     shortName.endsWith('TeardownMs') ||
     shortName.endsWith('TtftMs') ||
     shortName.endsWith('WaitMs');
+  const isPercentage = shortName.endsWith('Pct') && !shortName.endsWith('Rate');
+  const isThroughput =
+    shortName.endsWith('TokPerSec') ||
+    shortName.endsWith('TokensPerSec') ||
+    shortName.endsWith('Fps') ||
+    shortName.endsWith('CompressionRatio');
+  const scale: MetricScaleKind = isLatency
+    ? 'latency'
+    : isPercentage
+      ? 'percentage'
+      : isThroughput
+        ? 'throughput'
+        : 'unit';
+
   if (override) {
-    return { direction: override, isLatency };
+    return { direction: override, isLatency, scale };
   }
   if (isLatency || LOWER_IS_BETTER_SUFFIXES.includes(shortName)) {
-    return { direction: 'lower', isLatency };
+    return { direction: 'lower', isLatency, scale };
   }
-  return { direction: 'higher', isLatency };
+  return { direction: 'higher', isLatency, scale };
 }
 
 function evaluateMetricDelta(
@@ -63,15 +88,24 @@ function evaluateMetricDelta(
   current: number,
   maxRegression: number,
   maxLatencyRegressionMs: number,
+  maxRelativeRegression: number,
+  maxJankRegressionPct: number,
   overrides?: Record<string, MetricDirection>,
 ): MetricDelta {
-  const { direction, isLatency } = inferDirection(metric, overrides);
+  const { direction, scale } = inferMetricMeta(metric, overrides);
   const delta = roundMetric(current - baseline, 4);
   const regressionAmount = roundMetric(
     direction === 'higher' ? baseline - current : current - baseline,
     4,
   );
-  const threshold = isLatency ? maxLatencyRegressionMs : maxRegression;
+  let threshold = maxRegression;
+  if (scale === 'latency') {
+    threshold = maxLatencyRegressionMs;
+  } else if (scale === 'percentage') {
+    threshold = maxJankRegressionPct;
+  } else if (scale === 'throughput') {
+    threshold = roundMetric(Math.max(maxRegression, Math.abs(baseline) * maxRelativeRegression), 4);
+  }
   const regressed = regressionAmount > threshold;
 
   return {
@@ -93,6 +127,8 @@ export function compareScorecards(
   options: CompareOptions = {},
 ): ScorecardComparisonResult {
   const maxLatencyRegressionMs = options.maxLatencyRegressionMs ?? 50;
+  const maxRelativeRegression = options.maxRelativeRegression ?? 0.12;
+  const maxJankRegressionPct = options.maxJankRegressionPct ?? 2.0;
   const deltas: MetricDelta[] = [];
 
   deltas.push(
@@ -102,6 +138,8 @@ export function compareScorecards(
       current.summary.aggregateScore,
       maxRegression,
       maxLatencyRegressionMs,
+      maxRelativeRegression,
+      maxJankRegressionPct,
       options.metricDirections,
     ),
   );
@@ -138,6 +176,8 @@ export function compareScorecards(
         currVal,
         maxRegression,
         maxLatencyRegressionMs,
+        maxRelativeRegression,
+        maxJankRegressionPct,
         options.metricDirections,
       ),
     );
