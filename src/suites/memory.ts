@@ -239,11 +239,14 @@ async function seedCorpus(
   nowMs: number,
   setClock?: (ts: number) => void,
 ): Promise<Map<string, string>> {
+  const providerWithClock = provider as MemoryProvider & { setClock?: (ts: number) => void };
+  const effectiveSetClock =
+    setClock ?? (typeof providerWithClock.setClock === 'function' ? (ts: number) => providerWithClock.setClock!(ts) : undefined);
   const fixtureToId = new Map<string, string>();
   const idToFixture = new Map<string, string>();
   for (const item of items) {
     const ts = nowMs - (item.ageDays ?? 0) * 86_400_000;
-    setClock?.(ts);
+    effectiveSetClock?.(ts);
     const supersedesId = item.supersedesFixtureId
       ? fixtureToId.get(item.supersedesFixtureId)
       : undefined;
@@ -259,7 +262,7 @@ async function seedCorpus(
       supersedesId,
     });
     // Backdate baseline timestamps if provider used Date.now() instead of injected clock
-    if (!setClock && item.ageDays) {
+    if (!effectiveSetClock && item.ageDays) {
       saved.createdAt = ts;
       saved.updatedAt = ts;
       saved.lastAccessedAt = ts;
@@ -267,6 +270,7 @@ async function seedCorpus(
     fixtureToId.set(item.fixtureId, saved.id);
     idToFixture.set(saved.id, item.fixtureId);
   }
+  effectiveSetClock?.(nowMs);
   return idToFixture;
 }
 
